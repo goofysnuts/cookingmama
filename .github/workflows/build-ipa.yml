@@ -1,0 +1,60 @@
+name: Build unsigned IPA
+
+# Baut eine unsignierte .ipa für Sideloadly / SideStore (Signatur dort mit der eigenen Apple-ID).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Neueste Xcode-Version wählen
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Xcode-Projekt erzeugen (XcodeGen)
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Archiv bauen (ohne Signatur)
+        run: |
+          xcodebuild archive \
+            -project Kochbuch.xcodeproj \
+            -scheme Kochbuch \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Kochbuch.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | grep -E "error:|warning: .*Kochbuch/|\*\* ARCHIVE" ; test ${PIPESTATUS[0]} -eq 0
+          test -d "$RUNNER_TEMP/Kochbuch.xcarchive/Products/Applications/Kochbuch.app"
+
+      - name: IPA packen
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir -p Payload
+          cp -R Kochbuch.xcarchive/Products/Applications/Kochbuch.app Payload/
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Payload/Kochbuch.app/Info.plist)
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+          zip -qry "Kochbuch-$VERSION-${GITHUB_SHA::7}-unsigned.ipa" Payload
+
+      - name: IPA hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kochbuch-${{ env.APP_VERSION }}-unsigned-ipa
+          path: ${{ runner.temp }}/*.ipa
+          retention-days: 30
