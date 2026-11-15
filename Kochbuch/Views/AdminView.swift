@@ -34,7 +34,6 @@ struct AdminUsersView: View {
             HStack {
               Text(u.username).font(.headline)
               if u.role == "admin" { Pill(text: "Admin", color: .purple) }
-              if u.telegramLinked { Image(systemName: "paperplane.fill").font(.caption).foregroundStyle(.blue) }
               Spacer()
               Text("\(u.recipeCount) Rezepte").font(.caption).foregroundStyle(.secondary)
             }
@@ -267,35 +266,16 @@ struct AdminHouseholdsView: View {
   }
 }
 
-// MARK: - Einstellungen & Backup
+// MARK: - Backup
 
-struct AdminSettingsView: View {
+struct AdminBackupView: View {
   @Environment(AppModel.self) private var app
-  @State private var settings: AdminSettings?
-  @State private var token = ""
   @State private var alert: AlertMessage?
   @State private var backupURL: URL?
   @State private var loadingBackup = false
 
   var body: some View {
     Form {
-      Section {
-        if let masked = settings?.telegramBotTokenMasked {
-          LabeledContent("Aktuell", value: masked + ((settings?.telegramBotTokenFromEnv ?? false) ? " (Umgebungsvariable)" : ""))
-        } else {
-          Text("Kein Bot-Token hinterlegt.").foregroundStyle(.secondary)
-        }
-        SecureField("Neues Bot-Token", text: $token)
-        Button("Token speichern") { Task { await saveToken(token.trimmed) } }.disabled(token.trimmed.isEmpty)
-        if settings?.telegramBotTokenMasked != nil, settings?.telegramBotTokenFromEnv == false {
-          Button("Token entfernen", role: .destructive) { Task { await saveToken("") } }
-        }
-      } header: {
-        Text("Telegram-Bot")
-      } footer: {
-        Text("Token von @BotFather. Darüber verschickt das Kochbuch alle Telegram-Nachrichten.")
-      }
-
       Section {
         if let backupURL {
           ShareLink(item: backupURL) { Label("Backup teilen / sichern", systemImage: "square.and.arrow.up") }
@@ -309,28 +289,12 @@ struct AdminSettingsView: View {
           }
         }
         .disabled(loadingBackup)
-      } header: {
-        Text("Backup")
       } footer: {
         Text("Lädt eine Kopie der Datenbank herunter (ohne Fotos). Wiederherstellen geht über die Docker-Daten auf dem NAS.")
       }
     }
-    .navigationTitle("Telegram & Backup")
+    .navigationTitle("Backup")
     .alertMessage($alert)
-    .task { await load() }
-  }
-
-  private func load() async {
-    do { settings = try await app.client.get("admin/settings") } catch { alert = .error(error) }
-  }
-
-  private func saveToken(_ value: String) async {
-    struct Payload: Encodable { let telegramBotToken: String }
-    do {
-      try await app.client.call("PUT", "admin/settings", body: Payload(telegramBotToken: value))
-      token = ""
-      await load()
-    } catch { alert = .error(error) }
   }
 
   private func downloadBackup() async {

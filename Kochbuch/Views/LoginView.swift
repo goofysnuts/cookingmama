@@ -11,7 +11,6 @@ struct LoginView: View {
   @State private var server = UserDefaults.standard.string(forKey: "kochbuch.server") ?? "http://192.168.30.145:5000"
   @State private var username = ""
   @State private var password = ""
-  @State private var telegramChatId = ""
   @State private var mode: Mode = .login
   @State private var needsSetup = false
   @State private var busy = false
@@ -70,10 +69,6 @@ struct LoginView: View {
             .autocorrectionDisabled()
           SecureField("Passwort", text: $password)
             .textContentType(mode == .register || needsSetup ? UITextContentType.newPassword : UITextContentType.password)
-          if mode == .register, !needsSetup {
-            TextField("Telegram-Chat-ID (optional)", text: $telegramChatId)
-              .keyboardType(.numbersAndPunctuation)
-          }
         }
 
         if let error {
@@ -135,7 +130,7 @@ struct LoginView: View {
         let res: LoginResponse = try await app.client.send("POST", "auth/setup", body: Credentials(username: username.trimmed, password: password, deviceName: deviceName))
         await app.didLogin(res, server: server)
       } else if mode == .register {
-        let res: MessageResponse = try await app.client.send("POST", "auth/register", body: Registration(username: username.trimmed, password: password, telegramChatId: telegramChatId.nilIfEmpty))
+        let res: MessageResponse = try await app.client.send("POST", "auth/register", body: Registration(username: username.trimmed, password: password))
         info = res.message ?? "Konto angelegt. Ein Admin muss es noch freigeben."
         mode = .login
         password = ""
@@ -158,5 +153,4 @@ private struct Credentials: Encodable {
 private struct Registration: Encodable {
   let username: String
   let password: String
-  let telegramChatId: String?
 }

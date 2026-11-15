@@ -35,6 +35,7 @@ struct MoreView: View {
 
       Section("Einstellungen") {
         NavigationLink { AccountSettingsView() } label: { Label("Konto & Ernährung", systemImage: "person.text.rectangle") }
+        NavigationLink { NotificationSettingsView() } label: { Label("Mitteilungen", systemImage: "bell.badge") }
         NavigationLink { HouseholdsView() } label: { Label("Haushalte", systemImage: "house.and.flag") }
       }
 
@@ -42,7 +43,7 @@ struct MoreView: View {
         Section("Admin") {
           NavigationLink { AdminUsersView() } label: { Label("Nutzer", systemImage: "person.2") }
           NavigationLink { AdminHouseholdsView() } label: { Label("Alle Haushalte", systemImage: "building.2") }
-          NavigationLink { AdminSettingsView() } label: { Label("Telegram & Backup", systemImage: "gearshape.2") }
+          NavigationLink { AdminBackupView() } label: { Label("Backup", systemImage: "externaldrive") }
         }
       }
 
@@ -182,7 +183,6 @@ struct AccountSettingsView: View {
   @State private var mealTimes: [String: Date] = [:]
   @State private var customMeal: Set<String> = []
   @State private var reminder: Int? = nil
-  @State private var chatId = ""
   @State private var currentPassword = ""
   @State private var newPassword = ""
   @State private var alert: AlertMessage?
@@ -228,24 +228,9 @@ struct AccountSettingsView: View {
       }
 
       Section("Erinnerung an die Einkaufsliste") {
-        Picker("Telegram-Erinnerung", selection: $reminder) {
+        Picker("Erinnern", selection: $reminder) {
           ForEach(Labels.reminderIntervals, id: \.label) { Text($0.label).tag($0.hours) }
         }
-      }
-
-      Section {
-        TextField(app.me?.telegramChatIdMasked ?? "Chat-ID", text: $chatId).keyboardType(.numbersAndPunctuation)
-        if app.me?.telegramLinked == true {
-          Button("Testnachricht senden") { Task { await telegramTest() } }
-          Button("Verknüpfung entfernen", role: .destructive) { Task { await saveChatId("") } }
-        }
-        if !chatId.trimmed.isEmpty {
-          Button("Chat-ID speichern") { Task { await saveChatId(chatId.trimmed) } }
-        }
-      } header: {
-        Text("Telegram")
-      } footer: {
-        Text("Deine Chat-ID bekommst du z. B. von @userinfobot. Darüber kommen Vorrats-Warnungen, Stehzeit- und Einkaufserinnerungen.")
       }
 
       Section("Passwort ändern") {
@@ -324,23 +309,6 @@ struct AccountSettingsView: View {
       app.setMe(me)
       app.didChangeData()
       alert = AlertMessage(title: "Gespeichert", message: nil)
-    } catch { alert = .error(error) }
-  }
-
-  private func saveChatId(_ value: String) async {
-    struct Payload: Encodable { let telegramChatId: String }
-    do {
-      let me: Me = try await app.client.send("PATCH", "me", body: Payload(telegramChatId: value))
-      app.setMe(me)
-      chatId = ""
-      alert = AlertMessage(title: value.isEmpty ? "Telegram entfernt" : "Chat-ID gespeichert", message: nil)
-    } catch { alert = .error(error) }
-  }
-
-  private func telegramTest() async {
-    do {
-      try await app.client.call("POST", "me/telegram-test")
-      alert = AlertMessage(title: "Gesendet", message: "Schau in Telegram nach der Testnachricht.")
     } catch { alert = .error(error) }
   }
 
@@ -460,6 +428,61 @@ struct HouseholdsView: View {
     do {
       data = try await app.client.send("POST", "invites/\(id)/\(accept ? "accept" : "decline")")
       app.didChangeData()
+    } catch { alert = .error(error) }
+  }
+}
+
+// MARK: - Mitteilungen
+
+struct NotificationSettingsView: View {
+  @Environment(AppModel.self) private var app
+  @Environment(\.openURL) private var openURL
+  @State private var prefs = NotificationPrefs(comments: true, household: true, lowStock: true, restTimer: true, shoppingReminder: true)
+  @State private var authorized: Bool?
+  @State private var loaded = false
+  @State private var alert: AlertMessage?
+
+  var body: some View {
+    Form {
+      Section {
+        if authorized == false {
+          Label("Mitteilungen sind für das Kochbuch ausgeschaltet.", systemImage: "bell.slash")
+            .foregroundStyle(.orange)
+          Button("In den iOS-Einstellungen erlauben") {
+            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+          }
+        } else if authorized == true {
+          Label("Mitteilungen sind erlaubt.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        }
+      } footer: {
+        Text("Die App schaut beim Öffnen, jede Minute solange sie offen ist und im Hintergrund nach Neuem. Wie oft der Hintergrundabruf läuft, entscheidet iOS (meist alle 15 Minuten bis einige Stunden) – dafür muss „Hintergrundaktualisierung“ für das Kochbuch an sein. Stehzeiten kommen immer pünktlich, die stellt die App selbst.")
+      }
+
+      Section("Mitteilung bei …") {
+        Toggle("Vorrat wird knapp", isOn: $prefs.lowStock)
+        Toggle("Stehzeit vorbei", isOn: $prefs.restTimer)
+        Toggle("Erinnerung an die Einkaufsliste", isOn: $prefs.shoppingReminder)
+        Toggle("Bewertungen deiner Rezepte", isOn: $prefs.comments)
+        Toggle("Haushalts-Einladungen", isOn: $prefs.household)
+      }
+    }
+    .navigationTitle("Mitteilungen")
+    .alertMessage($alert)
+    .task {
+      if !loaded, let p = app.me?.notificationPrefs { prefs = p; loaded = true }
+      authorized = await NotificationService.requestPermission()
+    }
+    .onChange(of: prefs) { old, new in
+      guard loaded, old != new else { return }
+      Task { await save(new) }
+    }
+  }
+
+  private func save(_ value: NotificationPrefs) async {
+    struct Payload: Encodable { let notificationPrefs: NotificationPrefs }
+    do {
+      let me: Me = try await app.client.send("PATCH", "me", body: Payload(notificationPrefs: value))
+      app.setMe(me)
     } catch { alert = .error(error) }
   }
 }

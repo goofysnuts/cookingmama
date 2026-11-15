@@ -26,14 +26,33 @@ struct Me: Decodable {
   let role: String
   let isAdmin: Bool
   let dietPreference: String?
-  let telegramLinked: Bool
-  let telegramChatIdMasked: String?
+  let notificationPrefs: NotificationPrefs
   let mealTimes: MealTimes
   let defaultMealTimes: MealTimes
   let shoppingListReminderIntervalHours: Int?
   let canJoinMultipleHouseholds: Bool
   let activeHouseholdId: String?
   let unreadNotifications: Int
+}
+
+/// Welche Benachrichtigungen als iPhone-Mitteilung erscheinen sollen
+struct NotificationPrefs: Codable, Equatable {
+  var comments: Bool
+  var household: Bool
+  var lowStock: Bool
+  var restTimer: Bool
+  var shoppingReminder: Bool
+
+  func allows(_ category: String?) -> Bool {
+    switch category {
+    case "comments": return comments
+    case "household": return household
+    case "lowStock": return lowStock
+    case "restTimer": return restTimer
+    case "shoppingReminder": return shoppingReminder
+    default: return true
+    }
+  }
 }
 
 struct UserRef: Codable, Hashable, Identifiable {
@@ -408,6 +427,7 @@ struct AppNotification: Decodable, Identifiable, Hashable {
   let id: String
   let message: String
   let read: Bool
+  let category: String?
   let createdAt: String?
   let recipeId: String?
   let invite: Invite?
@@ -430,7 +450,6 @@ struct UserProfile: Decodable {
   let favorites: [RecipeSummary]
 }
 
-struct TelegramUsersResponse: Decodable { let users: [UserRef] }
 
 // MARK: Automatische Rezepte
 
@@ -461,7 +480,6 @@ struct AdminUser: Decodable, Identifiable, Hashable {
   let role: String
   let approved: Bool
   let canJoinMultipleHouseholds: Bool
-  let telegramLinked: Bool
   let recipeCount: Int
   let createdAt: String?
   let isSelf: Bool
@@ -484,8 +502,3 @@ struct AdminHousehold: Decodable, Identifiable, Hashable {
 }
 
 struct AdminHouseholdsResponse: Decodable { let households: [AdminHousehold] }
-
-struct AdminSettings: Decodable {
-  let telegramBotTokenMasked: String?
-  let telegramBotTokenFromEnv: Bool
-}

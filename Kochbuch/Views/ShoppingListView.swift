@@ -84,11 +84,6 @@ struct ShoppingListView: View {
           } label: {
             Label("Knappe Zutaten aus dem Vorrat", systemImage: "wand.and.stars")
           }
-          Button {
-            Task { await sendTelegram() }
-          } label: {
-            Label("Per Telegram senden", systemImage: "paperplane")
-          }
           ShareLink(item: shareText) {
             Label("Teilen", systemImage: "square.and.arrow.up")
           }
@@ -180,13 +175,6 @@ struct ShoppingListView: View {
       let res: ShoppingListResponse = try await app.client.send("POST", "shopping-list/auto")
       items = res.items
       alert = AlertMessage(title: "Einkaufsliste", message: "\(res.added ?? 0) Zutat(en) aus dem Vorrat eingetragen.")
-    } catch { alert = .error(error) }
-  }
-
-  private func sendTelegram() async {
-    do {
-      try await app.client.call("POST", "shopping-list/send")
-      alert = AlertMessage(title: "Gesendet", message: "Die Einkaufsliste wurde per Telegram verschickt.")
     } catch { alert = .error(error) }
   }
 }

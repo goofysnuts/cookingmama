@@ -11,6 +11,12 @@ final class AppModel {
   private(set) var ingredients: [IngredientInfo] = []
   var loadError: String?
 
+  /// Rezept, das per Tipp auf eine Mitteilung geöffnet werden soll
+  var openRecipeId: String?
+
+  /// Für den Notification-Delegate (Tipp auf Mitteilung)
+  static weak var current: AppModel?
+
   /// Wird nach Änderungen erhöht, die andere Tabs betreffen (Vorrat, Rezepte) – Listen laden dann neu
   private(set) var revision = 0
 
@@ -20,6 +26,7 @@ final class AppModel {
 
   init() {
     isLoggedIn = APIClient.shared.isLoggedIn
+    AppModel.current = self
     client.onUnauthorized = { [weak self] in
       self?.isLoggedIn = false
       self?.me = nil
@@ -42,6 +49,16 @@ final class AppModel {
       loadError = error.localizedDescription
     }
     await reloadIngredients()
+    _ = await NotificationService.requestPermission()
+    await checkNotifications()
+  }
+
+  /// Neue Benachrichtigungen abholen und als Mitteilung zeigen; aktualisiert den Zähler
+  func checkNotifications() async {
+    guard isLoggedIn else { return }
+    if await NotificationService.check(prefs: me?.notificationPrefs) != nil {
+      await refreshMe()
+    }
   }
 
   func refreshMe() async {
@@ -72,21 +89,17 @@ final class AppModel {
     client.clearToken()
     me = nil
     isLoggedIn = false
-    UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    NotificationService.resetState()
+    RestTimerNotifications.clear()
   }
 }
 
-/// Lokale Benachrichtigungen für Stehzeiten (funktionieren ohne Apple-Push)
+/// Lokale Mitteilungen für Stehzeiten zur exakten Zeit (funktionieren ohne Apple-Push)
 enum RestTimerNotifications {
-  static func requestPermission() async -> Bool {
-    let center = UNUserNotificationCenter.current()
-    let settings = await center.notificationSettings()
-    if settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional { return true }
-    return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-  }
+  private static let key = "kochbuch.restTimers.local"
 
   static func schedule(recipeId: String, recipeTitle: String, label: String, at date: Date) async {
-    guard await requestPermission() else { return }
+    guard await NotificationService.requestPermission() else { return }
     let seconds = date.timeIntervalSinceNow
     guard seconds > 1 else { return }
     let content = UNMutableNotificationContent()
@@ -94,9 +107,24 @@ enum RestTimerNotifications {
     content.body = "\(label) bei „\(recipeTitle)“ ist fertig – weiter geht's."
     content.sound = .default
     content.userInfo = ["recipeId": recipeId]
-    if #available(iOS 15.0, *) { content.interruptionLevel = .timeSensitive }
+    content.interruptionLevel = .timeSensitive
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
     let request = UNNotificationRequest(identifier: "rest-\(recipeId)-\(Int(date.timeIntervalSince1970))", content: content, trigger: trigger)
     try? await UNUserNotificationCenter.current().add(request)
+
+    var map = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+    map[recipeId] = date.timeIntervalSince1970
+    // Alte Einträge (älter als 2 Tage) aufräumen
+    map = map.filter { $0.value > Date().timeIntervalSince1970 - 2 * 86400 }
+    UserDefaults.standard.set(map, forKey: key)
   }
+
+  /// Wurde für dieses Rezept in den letzten zwei Tagen ein lokaler Timer gestellt?
+  static func wasScheduledLocally(recipeId: String?) -> Bool {
+    guard let recipeId, let map = UserDefaults.standard.dictionary(forKey: key) as? [String: Double],
+          let at = map[recipeId] else { return false }
+    return at > Date().timeIntervalSince1970 - 2 * 86400
+  }
+
+  static func clear() { UserDefaults.standard.removeObject(forKey: key) }
 }

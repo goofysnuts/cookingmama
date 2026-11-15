@@ -293,7 +293,7 @@ struct PantryEditView: View {
       } header: {
         Text("Vorrat")
       } footer: {
-        Text("Beim Mindestbestand gibt es eine Warnung (Telegram). Die Nachkaufmenge landet bei „Knappe Zutaten auf die Einkaufsliste“ auf der Liste.")
+        Text("Wird der Mindestbestand erreicht, bekommst du eine Mitteilung. Die Nachkaufmenge landet bei „Knappe Zutaten auf die Einkaufsliste“ auf der Liste.")
       }
 
       Section {

@@ -35,6 +35,14 @@
 	<string>Zum Fotografieren von Gerichten, Zutaten und Rezeptseiten.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Zum Auswählen von Fotos für Rezepte und Zutaten.</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>de.jannes.kochbuch.refresh</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -12,7 +12,6 @@ struct RecipeDetailView: View {
   @State private var showCookSheet = false
   @State private var showCommentSheet = false
   @State private var showDeleteConfirm = false
-  @State private var telegramUsers: [UserRef] = []
   @State private var busy = false
   @State private var fullscreenImage: String?
 
@@ -202,15 +201,12 @@ struct RecipeDetailView: View {
       .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
       .disabled(busy)
 
-      Menu {
-        ForEach(telegramUsers) { u in
-          Button(u.id == app.me?.id ? "An mich" : "An \(u.username)") { Task { await sendMissing(to: u.id) } }
+      if r.ingredients.contains(where: { !$0.enough }) {
+        Button {
+          Task { await missingToShoppingList(r) }
+        } label: {
+          Label("Fehlendes auf die Einkaufsliste", systemImage: "cart.badge.plus")
         }
-        if telegramUsers.isEmpty {
-          Text("Niemand hat Telegram verknüpft")
-        }
-      } label: {
-        Label("Fehlende Zutaten per Telegram", systemImage: "paperplane")
       }
     }
   }
@@ -379,9 +375,6 @@ struct RecipeDetailView: View {
       if recipe == nil || recipe?.servings != r.servings { servings = r.servings ?? 1 }
       recipe = r
       error = nil
-      if telegramUsers.isEmpty, let list: TelegramUsersResponse = try? await app.client.get("users/telegram") {
-        telegramUsers = list.users
-      }
     } catch {
       self.error = error.localizedDescription
     }
@@ -391,7 +384,7 @@ struct RecipeDetailView: View {
     struct Payload: Encodable { let checked: Bool }
     do {
       let res: StepToggleResponse = try await app.client.send("PUT", "recipes/\(r.id)/steps/\(step.index)", body: Payload(checked: !step.checked))
-      if let timer = res.restTimer, let date = Fmt.date(timer.notifyAt) {
+      if let timer = res.restTimer, let date = Fmt.date(timer.notifyAt), app.me?.notificationPrefs.restTimer ?? true {
         await RestTimerNotifications.schedule(recipeId: r.id, recipeTitle: r.title, label: timer.label, at: date)
         alert = AlertMessage(title: "Stehzeit läuft", message: "\(Fmt.minutes(timer.minutes)) (\(timer.label)). Du bekommst eine Benachrichtigung um \(date.formatted(date: .omitted, time: .shortened)).")
       }
@@ -428,12 +421,19 @@ struct RecipeDetailView: View {
     } catch { alert = .error(error) }
   }
 
-  private func sendMissing(to userId: String) async {
-    struct Payload: Encodable { let targetUserId: String }
-    struct Res: Decodable { let missingCount: Int? }
+  /// Fehlende Zutaten (für die gewählte Portionenzahl) auf die Einkaufsliste setzen
+  private func missingToShoppingList(_ r: RecipeDetail) async {
+    struct Payload: Encodable { let factor: Double }
+    struct Res: Decodable { let missingCount: Int?; let added: Int? }
     do {
-      let res: Res = try await app.client.send("POST", "recipes/\(recipeId)/send-missing", body: Payload(targetUserId: userId))
-      alert = AlertMessage(title: "Gesendet", message: (res.missingCount ?? 0) == 0 ? "Es ist schon alles da." : "\(res.missingCount ?? 0) fehlende Zutat(en) per Telegram verschickt.")
+      let res: Res = try await app.client.send("POST", "recipes/\(recipeId)/missing-to-shopping-list", body: Payload(factor: scale(r)))
+      let missing = res.missingCount ?? 0
+      let added = res.added ?? 0
+      alert = AlertMessage(
+        title: "Einkaufsliste",
+        message: missing == 0 ? "Es ist schon alles da." : "\(added) Zutat(en) eingetragen\(added < missing ? ", der Rest stand schon drauf" : "")."
+      )
+      app.didChangeData()
     } catch { alert = .error(error) }
   }
 

@@ -11,21 +11,33 @@ liefert nur noch die API (`/api/v1`), die Oberfläche ist diese SwiftUI-App. iOS
 - **Rezepte:** Suche (Titel, Zutat, #tag), Filter (Art, Ernährung, Mahlzeit, Favoriten), Zufallsrezept
 - **Rezeptdetail:** Fotos, Portionsrechner, Zutaten mit Vorratsstatus und Alternativen, abhakbare Schritte
   mit Zutatenmengen, Backangaben, Nährwerte, Bewertungen/Kommentare, Favorit, „Gekocht/Gebacken“ bucht den
-  Vorrat ab (Alternative wählbar), fehlende Zutaten per Telegram
-- **Stehzeiten:** Wird ein Schritt abgehakt, auf den eine Stehzeit folgt, plant die App eine lokale
-  Benachrichtigung (funktioniert auch ohne kostenpflichtigen Apple-Account). Telegram-Hinweise kommen
-  wie bisher vom Server.
+  Vorrat ab (Alternative wählbar), fehlende Zutaten auf die Einkaufsliste
+- **Mitteilungen:** Vorrat knapp, Stehzeit vorbei, Einkaufslisten-Erinnerung, neue Bewertungen,
+  Haushalts-Einladungen, Kontoanfragen (Admins) – je Kategorie abschaltbar (Mehr → Mitteilungen).
+  Tippen auf eine Mitteilung öffnet das Rezept.
 - **Rezept-Editor:** Koch-/Backrezept, Mahlzeiten, Tags, Fotos (Mediathek/Kamera), Zutaten mit Einheit,
   Einstufung, Hinweis, Alternative und Vorteig, Schritte mit Zutatenmengen, Stehzeit-Schritte,
   Backschritt, Stehzeit-Planung, Nährwerte
 - **Automatisch:** Fotos/PDFs eines Rezepts hochladen → Claude erstellt es („Erstelle meine Kochbuch-Rezepte“)
 - **Vorrat:** Haushalt wechseln, Bestand/Mindestbestand/Nachkaufmenge/Kauf-Einheit, Foto, schnelles
   Auffüllen per Wischen, knappe Zutaten auf die Einkaufsliste
-- **Einkaufsliste:** Einträge mit Vorschlägen, Abhaken bucht in den Vorrat, Telegram-Versand, Teilen
+- **Einkaufsliste:** Einträge mit Vorschlägen, Abhaken bucht in den Vorrat, Teilen
 - **Mehr:** Benachrichtigungen (inkl. Haushalts-Einladungen), Favoriten, Konto (Ernährung, Essenszeiten,
-  Telegram, Einkaufserinnerung, Passwort), Haushalte (einladen, umbenennen, verlassen)
+  Einkaufserinnerung, Passwort), Mitteilungen, Haushalte (einladen, umbenennen, verlassen)
 - **Admin:** Kontoanfragen freigeben, Nutzer anlegen/Rollen/Passwort/Löschen, alle Haushalte verwalten,
-  Telegram-Bot-Token, Datenbank-Backup
+  Datenbank-Backup
+
+## Wie Mitteilungen ankommen
+
+Mit kostenloser Apple-ID gibt es keinen echten Push über Apple (APNs). Die App holt neue
+Benachrichtigungen deshalb selbst ab:
+
+- beim Öffnen und jede Minute, solange sie offen ist,
+- im Hintergrund über die iOS-Hintergrundaktualisierung. Wie oft die läuft, bestimmt iOS
+  (meist alle 15 Minuten bis einige Stunden, öfter bei häufig genutzten Apps). Dafür muss unter
+  Einstellungen → Allgemein → Hintergrundaktualisierung das Kochbuch an sein. Wird die App aus dem
+  App-Umschalter weggewischt, gibt es bis zum nächsten Öffnen keinen Hintergrundabruf.
+- **Stehzeiten** stellt die App beim Abhaken selbst als Wecker – die kommen immer pünktlich.
 
 ## Bauen ohne Mac (GitHub Actions + Sideloadly)
 

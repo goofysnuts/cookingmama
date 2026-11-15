@@ -20,14 +20,25 @@ struct KochbuchApp: App {
         }
     }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .active, app.isLoggedIn {
-        Task { await app.refreshMe() }
+      switch phase {
+      case .active:
+        if app.isLoggedIn { Task { await app.checkNotifications() } }
+      case .background:
+        if app.isLoggedIn { NotificationService.scheduleBackgroundRefresh() }
+      default:
+        break
       }
+    }
+    .backgroundTask(.appRefresh(NotificationService.refreshTaskId)) {
+      // Von iOS im Hintergrund gestartet: neue Benachrichtigungen abholen und nächsten Lauf anmelden
+      await MainActor.run { NotificationService.scheduleBackgroundRefresh() }
+      let prefs = await MainActor.run { AppModel.current?.me?.notificationPrefs }
+      _ = await NotificationService.check(prefs: prefs)
     }
   }
 }
 
-/// Zeigt lokale Benachrichtigungen (Stehzeit) auch, wenn die App offen ist
+/// Zeigt Mitteilungen auch bei geöffneter App und öffnet beim Tippen das passende Rezept
 final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     UNUserNotificationCenter.current().delegate = self
@@ -37,10 +48,27 @@ final class NotificationDelegate: NSObject, UIApplicationDelegate, UNUserNotific
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
     [.banner, .sound, .list]
   }
+
+  func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    let info = response.notification.request.content.userInfo
+    let recipeId = info["recipeId"] as? String
+    let notificationId = info["notificationId"] as? String
+    await MainActor.run {
+      guard let app = AppModel.current else { return }
+      if let recipeId { app.openRecipeId = recipeId }
+      if let notificationId {
+        Task {
+          try? await app.client.call("POST", "notifications/\(notificationId)/read")
+          await app.checkNotifications()
+        }
+      }
+    }
+  }
 }
 
 struct RootView: View {
   @Environment(AppModel.self) private var app
+  @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
     Group {
@@ -51,6 +79,15 @@ struct RootView: View {
       }
     }
     .animation(.default, value: app.isLoggedIn)
+    .task(id: "\(app.isLoggedIn)-\(scenePhase == .active)") {
+      // Solange die App offen ist: jede Minute nach neuen Benachrichtigungen schauen
+      guard app.isLoggedIn, scenePhase == .active else { return }
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(60))
+        if Task.isCancelled { break }
+        await app.checkNotifications()
+      }
+    }
   }
 }
 
@@ -82,6 +119,19 @@ struct MainTabView: View {
         .tabItem { Label("Mehr", systemImage: "person.crop.circle") }
         .badge(app.me?.unreadNotifications ?? 0)
         .tag(AppTab.more)
+    }
+    .sheet(item: Binding(
+      get: { app.openRecipeId.map { IdentifiedString(value: $0) } },
+      set: { app.openRecipeId = $0?.value }
+    )) { item in
+      NavigationStack {
+        RecipeDetailView(recipeId: item.value)
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Schließen") { app.openRecipeId = nil }
+            }
+          }
+      }
     }
   }
 }
