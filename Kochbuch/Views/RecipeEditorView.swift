@@ -55,10 +55,14 @@ struct RecipeEditorView: View {
   @Environment(AppModel.self) private var app
   @Environment(\.dismiss) private var dismiss
   let recipe: RecipeDetail?
+  /// Vorbelegte Kategorie, wenn aus einer Kategorie heraus ein neues Rezept angelegt wird
+  var presetCategory: CategoryRef? = nil
 
   @State private var title = ""
   @State private var description = ""
   @State private var recipeType = "kochen"
+  @State private var categoryId = ""
+  @State private var showNewCategory = false
   @State private var mealTypes: Set<String> = []
   @State private var tags = ""
   @State private var prepMinutes = ""
@@ -124,6 +128,9 @@ struct RecipeEditorView: View {
         photoItems = []
       }
     }
+    .sheet(isPresented: $showNewCategory) {
+      CategoryEditor(target: .new) { created in categoryId = created.id }
+    }
     .onAppear {
       if !loaded { fill(); loaded = true }
     }
@@ -140,6 +147,18 @@ struct RecipeEditorView: View {
         Text("Backrezept").tag("backen")
       }
       .pickerStyle(.segmented)
+      HStack {
+        Picker("Kategorie", selection: $categoryId) {
+          Text("Keine").tag("")
+          ForEach(app.categories) { c in Text(c.ref.label).tag(c.id) }
+        }
+        Button {
+          showNewCategory = true
+        } label: {
+          Image(systemName: "plus.circle")
+        }
+        .buttonStyle(.borderless)
+      }
       VStack(alignment: .leading, spacing: 6) {
         Text("Passt zu").font(.caption).foregroundStyle(.secondary)
         FlowLayout(spacing: 6) {
@@ -400,7 +419,11 @@ struct RecipeEditorView: View {
   // MARK: Laden / Speichern
 
   private func fill() {
-    guard let r = recipe else { return }
+    guard let r = recipe else {
+      categoryId = presetCategory?.id ?? ""
+      return
+    }
+    categoryId = r.category?.id ?? ""
     title = r.title
     description = r.description ?? ""
     recipeType = r.recipeType
@@ -477,6 +500,7 @@ struct RecipeEditorView: View {
         title: title.trimmed,
         description: description.nilIfEmpty,
         recipeType: recipeType,
+        categoryId: categoryId.nilIfEmpty,
         mealTypes: Labels.mealTypes.filter { mealTypes.contains($0) },
         tags: tags.split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init),
         prepMinutes: int(prepMinutes),

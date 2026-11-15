@@ -110,6 +110,7 @@ struct DietPill: View {
 struct RecipeRow: View {
   let recipe: RecipeSummary
   var showMissing = false
+  var showCategory = true
 
   var body: some View {
     HStack(spacing: 12) {
@@ -135,6 +136,9 @@ struct RecipeRow: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         HStack(spacing: 4) {
+          if showCategory, let category = recipe.category {
+            Pill(text: category.label, color: .brown)
+          }
           DietPill(diet: recipe.dietLabel)
           if recipe.dietLabelAlt != nil, recipe.dietLabelAlt != recipe.dietLabel, recipe.dietLabel != "vegan",
              let alt = recipe.dietLabelAlt, alt != "keins" {

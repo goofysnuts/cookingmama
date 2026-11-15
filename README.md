@@ -8,7 +8,8 @@ liefert nur noch die API (`/api/v1`), die Oberfläche ist diese SwiftUI-App. iOS
 - **Start:** Begrüßung, Vorschläge passend zur Tageszeit, Ernährung und Vorrat („Sofort kochbar“ oder
   „Auch mit fehlenden Zutaten“), Favoriten für die aktuelle Mahlzeit, Hinweise auf Rezepte mit langer
   Stehzeit, „Zuletzt gekocht“
-- **Rezepte:** Suche (Titel, Zutat, #tag), Filter (Art, Ernährung, Mahlzeit, Favoriten), Zufallsrezept
+- **Rezepte:** Kategorie-Leiste und Schaltfläche „Kategorien“ (Kacheln mit Anzahl, eigene Kategorien anlegen, Admins
+  benennen um/löschen), Suche (Titel, Kategorie, Zutat, #tag), Filter (Art, Ernährung, Mahlzeit, Favoriten), Zufallsrezept
 - **Rezeptdetail:** Fotos, Portionsrechner, Zutaten mit Vorratsstatus und Alternativen, abhakbare Schritte
   mit Zutatenmengen, Backangaben, Nährwerte, Bewertungen/Kommentare, Favorit, „Gekocht/Gebacken“ bucht den
   Vorrat ab (Alternative wählbar), fehlende Zutaten auf die Einkaufsliste

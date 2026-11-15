@@ -72,10 +72,37 @@ struct MissingIngredient: Decodable, Hashable {
   let unit: String
 }
 
+/// Kategorie, wie sie an einem Rezept hängt
+struct CategoryRef: Codable, Hashable, Identifiable {
+  let id: String
+  let name: String
+  let icon: String?
+
+  var label: String { icon.map { "\($0) \(name)" } ?? name }
+}
+
+/// Kategorie in der Übersicht (mit Anzahl Rezepte)
+struct RecipeCategory: Decodable, Hashable, Identifiable {
+  let id: String
+  let name: String
+  let icon: String?
+  let sortOrder: Int
+  let recipeCount: Int
+
+  var ref: CategoryRef { CategoryRef(id: id, name: name, icon: icon) }
+}
+
+struct CategoriesResponse: Decodable {
+  let categories: [RecipeCategory]
+  let uncategorizedCount: Int
+  let created: CategoryRef?
+}
+
 /// Rezept in Listen (Dashboard, Rezepte, Favoriten)
 struct RecipeSummary: Decodable, Identifiable, Hashable {
   let id: String
   let title: String
+  let category: CategoryRef?
   let description: String?
   let imageUrl: String?
   let recipeType: String
@@ -198,6 +225,7 @@ struct RatingInfo: Decodable, Hashable {
 struct RecipeDetail: Decodable, Identifiable {
   let id: String
   let title: String
+  let category: CategoryRef?
   let description: String?
   let imageUrl: String?
   let images: [String]
@@ -272,6 +300,7 @@ struct RecipeInput: Encodable {
   var title: String
   var description: String?
   var recipeType: String
+  var categoryId: String?
   var mealTypes: [String]
   var tags: [String]
   var prepMinutes: Int?

@@ -9,6 +9,8 @@ final class AppModel {
   private(set) var isLoggedIn: Bool
   private(set) var me: Me?
   private(set) var ingredients: [IngredientInfo] = []
+  private(set) var categories: [RecipeCategory] = []
+  private(set) var uncategorizedCount = 0
   var loadError: String?
 
   /// Rezept, das per Tipp auf eine Mitteilung geöffnet werden soll
@@ -49,6 +51,7 @@ final class AppModel {
       loadError = error.localizedDescription
     }
     await reloadIngredients()
+    await reloadCategories()
     _ = await NotificationService.requestPermission()
     await checkNotifications()
   }
@@ -73,6 +76,15 @@ final class AppModel {
     }
   }
 
+  func reloadCategories() async {
+    if let res: CategoriesResponse = try? await client.get("categories") { apply(res) }
+  }
+
+  func apply(_ res: CategoriesResponse) {
+    categories = res.categories
+    uncategorizedCount = res.uncategorizedCount
+  }
+
   func ingredient(named name: String) -> IngredientInfo? {
     let key = name.trimmed.lowercased()
     return ingredients.first { $0.name.lowercased() == key }
@@ -81,7 +93,10 @@ final class AppModel {
   /// Nach Änderungen (gekocht, Vorrat, Rezept gespeichert) aufrufen
   func didChangeData() {
     revision += 1
-    Task { await reloadIngredients() }
+    Task {
+      await reloadIngredients()
+      await reloadCategories()
+    }
   }
 
   func logout() async {

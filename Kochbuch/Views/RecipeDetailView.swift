@@ -97,6 +97,9 @@ struct RecipeDetailView: View {
           Text(d).foregroundStyle(.secondary)
         }
         FlowLayout(spacing: 6) {
+          if let category = r.category {
+            Pill(text: category.label, color: .brown)
+          }
           Pill(text: r.isBaking ? "Backrezept" : "Kochrezept", systemImage: r.isBaking ? "birthday.cake" : "fork.knife")
           DietPill(diet: r.dietLabel)
           if let alt = r.dietLabelAlt, alt != r.dietLabel, alt != "keins" {
