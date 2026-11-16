@@ -36,13 +36,11 @@ struct MoreView: View {
       Section("Einstellungen") {
         NavigationLink { AccountSettingsView() } label: { Label("Konto & Ernährung", systemImage: "person.text.rectangle") }
         NavigationLink { NotificationSettingsView() } label: { Label("Mitteilungen", systemImage: "bell.badge") }
-        NavigationLink { HouseholdsView() } label: { Label("Haushalte", systemImage: "house.and.flag") }
       }
 
       if app.isAdmin {
         Section("Admin") {
           NavigationLink { AdminUsersView() } label: { Label("Nutzer", systemImage: "person.2") }
-          NavigationLink { AdminHouseholdsView() } label: { Label("Alle Haushalte", systemImage: "building.2") }
           NavigationLink { AdminBackupView() } label: { Label("Backup", systemImage: "externaldrive") }
         }
       }
@@ -112,13 +110,6 @@ struct NotificationsView: View {
                 Text(Fmt.relative(n.createdAt)).font(.caption2).foregroundStyle(.tertiary)
               }
             }
-            if let invite = n.invite, invite.status == "pending" {
-              HStack {
-                Button("Annehmen") { Task { await respond(invite.id, accept: true) } }.buttonStyle(.borderedProminent)
-                Button("Ablehnen") { Task { await respond(invite.id, accept: false) } }.buttonStyle(.bordered)
-              }
-              .padding(.leading, 16)
-            }
             if let recipeId = n.recipeId {
               NavigationLink("Zum Rezept") { RecipeDetailView(recipeId: recipeId) }
                 .font(.caption)
@@ -165,14 +156,6 @@ struct NotificationsView: View {
     await app.refreshMe()
   }
 
-  private func respond(_ inviteId: String, accept: Bool) async {
-    do {
-      let _: HouseholdsResponse = try await app.client.send("POST", "invites/\(inviteId)/\(accept ? "accept" : "decline")")
-      await load()
-      await app.refreshMe()
-      app.didChangeData()
-    } catch { alert = .error(error) }
-  }
 }
 
 // MARK: - Konto
@@ -322,122 +305,12 @@ struct AccountSettingsView: View {
   }
 }
 
-// MARK: - Haushalte
-
-struct HouseholdsView: View {
-  @Environment(AppModel.self) private var app
-  @State private var data: HouseholdsResponse?
-  @State private var alert: AlertMessage?
-  @State private var inviteTo: Household?
-  @State private var inviteName = ""
-  @State private var renameTarget: Household?
-  @State private var newName = ""
-
-  var body: some View {
-    List {
-      if let data {
-        if !data.pendingInvites.isEmpty {
-          Section("Einladungen") {
-            ForEach(data.pendingInvites) { inv in
-              VStack(alignment: .leading, spacing: 6) {
-                Text("„\(inv.householdName)“\(inv.invitedBy.map { " von \($0)" } ?? "")")
-                HStack {
-                  Button("Annehmen") { Task { await respond(inv.id, true) } }.buttonStyle(.borderedProminent)
-                  Button("Ablehnen") { Task { await respond(inv.id, false) } }.buttonStyle(.bordered)
-                }
-              }
-            }
-          }
-        }
-        ForEach(data.households) { h in
-          Section {
-            if h.isActive {
-              Label("Aktiver Haushalt für den Vorrat", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            } else {
-              Button("Als aktiven Haushalt wählen") { Task { await activate(h) } }
-            }
-            ForEach(h.members) { m in Label(m.username, systemImage: "person") }
-            Button("Jemanden einladen") { inviteName = ""; inviteTo = h }
-            Button("Umbenennen") { newName = h.name; renameTarget = h }
-            if !h.isOwnHousehold {
-              Button("Haushalt verlassen", role: .destructive) { Task { await leave(h) } }
-            }
-          } header: {
-            Text(h.name + (h.isOwnHousehold ? " (eigener)" : ""))
-          }
-        }
-        if app.me?.canJoinMultipleHouseholds == false {
-          Text("Du kannst laut Admin-Einstellung keinen weiteren Haushalten beitreten.")
-            .font(.footnote).foregroundStyle(.secondary)
-        }
-      } else {
-        ProgressView().frame(maxWidth: .infinity)
-      }
-    }
-    .navigationTitle("Haushalte")
-    .refreshable { await load() }
-    .task { await load() }
-    .alertMessage($alert)
-    .alert("Einladen", isPresented: Binding(get: { inviteTo != nil }, set: { if !$0 { inviteTo = nil } })) {
-      TextField("Benutzername", text: $inviteName).textInputAutocapitalization(.never)
-      Button("Einladen") { if let h = inviteTo { Task { await invite(h) } } }
-      Button("Abbrechen", role: .cancel) { inviteTo = nil }
-    }
-    .alert("Umbenennen", isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
-      TextField("Name", text: $newName)
-      Button("Sichern") { if let h = renameTarget { Task { await rename(h) } } }
-      Button("Abbrechen", role: .cancel) { renameTarget = nil }
-    }
-  }
-
-  private func load() async {
-    do { data = try await app.client.get("households") } catch { alert = .error(error) }
-  }
-
-  private func activate(_ h: Household) async {
-    struct Payload: Encodable { let householdId: String }
-    do {
-      data = try await app.client.send("PUT", "households/active", body: Payload(householdId: h.id))
-      app.didChangeData()
-    } catch { alert = .error(error) }
-  }
-
-  private func invite(_ h: Household) async {
-    struct Payload: Encodable { let username: String }
-    do {
-      try await app.client.call("POST", "households/\(h.id)/invite", body: Payload(username: inviteName.trimmed))
-      alert = AlertMessage(title: "Eingeladen", message: "\(inviteName.trimmed) sieht die Einladung in den Benachrichtigungen.")
-    } catch { alert = .error(error) }
-    inviteTo = nil
-  }
-
-  private func rename(_ h: Household) async {
-    struct Payload: Encodable { let name: String }
-    do { data = try await app.client.send("PATCH", "households/\(h.id)", body: Payload(name: newName.trimmed)) } catch { alert = .error(error) }
-    renameTarget = nil
-  }
-
-  private func leave(_ h: Household) async {
-    do {
-      data = try await app.client.send("DELETE", "households/\(h.id)/membership")
-      app.didChangeData()
-    } catch { alert = .error(error) }
-  }
-
-  private func respond(_ id: String, _ accept: Bool) async {
-    do {
-      data = try await app.client.send("POST", "invites/\(id)/\(accept ? "accept" : "decline")")
-      app.didChangeData()
-    } catch { alert = .error(error) }
-  }
-}
-
 // MARK: - Mitteilungen
 
 struct NotificationSettingsView: View {
   @Environment(AppModel.self) private var app
   @Environment(\.openURL) private var openURL
-  @State private var prefs = NotificationPrefs(comments: true, household: true, lowStock: true, restTimer: true, shoppingReminder: true)
+  @State private var prefs = NotificationPrefs(comments: true, restTimer: true, shoppingReminder: true)
   @State private var authorized: Bool?
   @State private var loaded = false
   @State private var alert: AlertMessage?
@@ -459,11 +332,9 @@ struct NotificationSettingsView: View {
       }
 
       Section("Mitteilung bei …") {
-        Toggle("Vorrat wird knapp", isOn: $prefs.lowStock)
         Toggle("Stehzeit vorbei", isOn: $prefs.restTimer)
         Toggle("Erinnerung an die Einkaufsliste", isOn: $prefs.shoppingReminder)
         Toggle("Bewertungen deiner Rezepte", isOn: $prefs.comments)
-        Toggle("Haushalts-Einladungen", isOn: $prefs.household)
       }
     }
     .navigationTitle("Mitteilungen")

@@ -9,7 +9,7 @@ struct RecipeDetailView: View {
   @State private var error: String?
   @State private var servings: Int = 1
   @State private var alert: AlertMessage?
-  @State private var showCookSheet = false
+  @State private var showShoppingSheet = false
   @State private var showCommentSheet = false
   @State private var showDeleteConfirm = false
   @State private var busy = false
@@ -31,10 +31,11 @@ struct RecipeDetailView: View {
     .refreshable { await load() }
     .alertMessage($alert)
     .toolbar { toolbarItems }
-    .sheet(isPresented: $showCookSheet) {
+    .sheet(isPresented: $showShoppingSheet) {
       if let recipe {
-        CookSheet(recipe: recipe) { usedAlternatives in
-          Task { await cook(usedAlternatives) }
+        ShoppingPickSheet(recipe: recipe, factor: scale(recipe), servings: servings) { message in
+          alert = AlertMessage(title: "Einkaufsliste", message: message)
+          app.didChangeData()
         }
       }
     }
@@ -195,22 +196,20 @@ struct RecipeDetailView: View {
   private func actionsSection(_ r: RecipeDetail) -> some View {
     Section {
       Button {
-        showCookSheet = true
+        showShoppingSheet = true
       } label: {
-        Label(r.isBaking ? "Gebacken – Vorrat abbuchen" : "Gekocht – Vorrat abbuchen", systemImage: "checkmark.circle.fill")
+        Label("Auf die Einkaufsliste", systemImage: "cart.badge.plus")
           .frame(maxWidth: .infinity)
       }
       .buttonStyle(.borderedProminent)
       .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-      .disabled(busy)
 
-      if r.ingredients.contains(where: { !$0.enough }) {
-        Button {
-          Task { await missingToShoppingList(r) }
-        } label: {
-          Label("Fehlendes auf die Einkaufsliste", systemImage: "cart.badge.plus")
-        }
+      Button {
+        Task { await cook() }
+      } label: {
+        Label(r.isBaking ? "Heute gebacken" : "Heute gekocht", systemImage: "checkmark.circle")
       }
+      .disabled(busy)
     }
   }
 
@@ -273,9 +272,6 @@ struct RecipeDetailView: View {
   private func ingredientRow(_ ing: RecipeIngredient, _ r: RecipeDetail) -> some View {
     let amount = ing.quantity * scale(r)
     HStack(alignment: .firstTextBaseline) {
-      Image(systemName: ing.enough ? "checkmark.circle.fill" : "circle")
-        .foregroundStyle(ing.enough ? Color.green : Color.orange)
-        .font(.caption)
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 4) {
           Text(ing.name)
@@ -288,11 +284,6 @@ struct RecipeDetailView: View {
           Text("↔︎ \(alt.name)\(alt.dietType != ing.dietType ? " (\(Labels.diet(alt.dietType)))" : "")")
             .font(.caption)
             .foregroundStyle(.teal)
-        }
-        if let stock = ing.stock, !stock.unlimited {
-          Text("Vorrat: \(Fmt.quantity(stock.quantity, stock.unit))").font(.caption2).foregroundStyle(.tertiary)
-        } else if ing.stock == nil {
-          Text("Nicht im Vorrat").font(.caption2).foregroundStyle(.tertiary)
         }
       }
       Spacer()
@@ -412,31 +403,14 @@ struct RecipeDetailView: View {
     } catch { alert = .error(error) }
   }
 
-  private func cook(_ usedAlternatives: [String]) async {
-    struct Payload: Encodable { let usedAlternativeIds: [String] }
+  private func cook() async {
     busy = true
     defer { busy = false }
     do {
-      let res: MessageResponse = try await app.client.send("POST", "recipes/\(recipeId)/cook", body: Payload(usedAlternativeIds: usedAlternatives))
+      let res: MessageResponse = try await app.client.send("POST", "recipes/\(recipeId)/cook")
       alert = AlertMessage(title: "Guten Appetit!", message: res.message)
       app.didChangeData()
       await load()
-    } catch { alert = .error(error) }
-  }
-
-  /// Fehlende Zutaten (für die gewählte Portionenzahl) auf die Einkaufsliste setzen
-  private func missingToShoppingList(_ r: RecipeDetail) async {
-    struct Payload: Encodable { let factor: Double }
-    struct Res: Decodable { let missingCount: Int?; let added: Int? }
-    do {
-      let res: Res = try await app.client.send("POST", "recipes/\(recipeId)/missing-to-shopping-list", body: Payload(factor: scale(r)))
-      let missing = res.missingCount ?? 0
-      let added = res.added ?? 0
-      alert = AlertMessage(
-        title: "Einkaufsliste",
-        message: missing == 0 ? "Es ist schon alles da." : "\(added) Zutat(en) eingetragen\(added < missing ? ", der Rest stand schon drauf" : "")."
-      )
-      app.didChangeData()
     } catch { alert = .error(error) }
   }
 
@@ -461,57 +435,78 @@ struct IdentifiedString: Identifiable {
   var id: String { value }
 }
 
-// MARK: - Kochen (Alternativen wählen)
+// MARK: - Zutaten auf die Einkaufsliste
 
-struct CookSheet: View {
+struct ShoppingPickSheet: View {
+  @Environment(AppModel.self) private var app
   @Environment(\.dismiss) private var dismiss
   let recipe: RecipeDetail
-  let onCook: ([String]) -> Void
-  @State private var usedAlternatives: Set<String> = []
+  let factor: Double
+  let servings: Int
+  let onDone: (String) -> Void
+  @State private var selected: Set<String> = []
+  @State private var busy = false
+  @State private var error: String?
 
   var body: some View {
     NavigationStack {
-      Form {
+      List {
         Section {
-          Text("Die Zutatenmengen werden von deinem Vorrat abgebucht. Bei Zutaten mit Alternative kannst du wählen, was du verwendet hast.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        }
-        let withAlternatives = recipe.ingredients.filter { $0.alternative != nil }
-        if !withAlternatives.isEmpty {
-          Section("Verwendet") {
-            ForEach(withAlternatives) { ing in
-              Picker(ing.name, selection: Binding(
-                get: { usedAlternatives.contains(ing.id) },
-                set: { if $0 { usedAlternatives.insert(ing.id) } else { usedAlternatives.remove(ing.id) } }
-              )) {
-                Text(ing.name).tag(false)
-                Text(ing.alternative?.name ?? "").tag(true)
+          ForEach(recipe.ingredients) { ing in
+            Button {
+              if selected.contains(ing.id) { selected.remove(ing.id) } else { selected.insert(ing.id) }
+            } label: {
+              HStack {
+                Image(systemName: selected.contains(ing.id) ? "checkmark.circle.fill" : "circle")
+                  .foregroundStyle(selected.contains(ing.id) ? Color.accentColor : Color.secondary)
+                Text(ing.name).foregroundStyle(Color.primary)
+                Spacer()
+                Text(Fmt.quantity(ing.quantity * factor, ing.unit)).foregroundStyle(.secondary).monospacedDigit()
               }
             }
           }
-        }
-        let missing = recipe.ingredients.filter { !$0.enough }
-        if !missing.isEmpty {
-          Section("Nicht genug im Vorrat") {
-            ForEach(missing) { Text($0.name) }
+        } header: {
+          HStack {
+            Text(recipe.servings != nil ? "Für \(servings) Portion\(servings == 1 ? "" : "en")" : "Zutaten")
+            Spacer()
+            Button(selected.count == recipe.ingredients.count ? "Keine" : "Alle") {
+              selected = selected.count == recipe.ingredients.count ? [] : Set(recipe.ingredients.map(\.id))
+            }
+            .font(.caption)
           }
+        } footer: {
+          Text("Hake an, was dir fehlt. Steht eine Zutat schon offen auf der Liste, wird die Menge dazugezählt.")
         }
+        if let error { Text(error).foregroundStyle(.red) }
       }
-      .navigationTitle(recipe.isBaking ? "Gebacken" : "Gekocht")
+      .navigationTitle("Auf die Einkaufsliste")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Abbuchen") {
-            onCook(Array(usedAlternatives))
-            dismiss()
-          }
-          .bold()
+          Button("Hinzufügen (\(selected.count))") { Task { await save() } }
+            .bold()
+            .disabled(busy || selected.isEmpty)
         }
       }
     }
     .presentationDetents([.medium, .large])
+  }
+
+  private func save() async {
+    struct Payload: Encodable { let factor: Double; let ingredientIds: [String] }
+    struct Res: Decodable { let count: Int?; let added: Int? }
+    busy = true
+    defer { busy = false }
+    do {
+      let res: Res = try await app.client.send("POST", "recipes/\(recipe.id)/to-shopping-list", body: Payload(factor: factor, ingredientIds: Array(selected)))
+      let count = res.count ?? 0
+      let added = res.added ?? 0
+      onDone(added == count ? "\(count) Zutat(en) eingetragen." : "\(count) Zutat(en) übernommen, davon \(count - added) zu bestehenden Einträgen dazugezählt.")
+      dismiss()
+    } catch {
+      self.error = error.localizedDescription
+    }
   }
 }
 

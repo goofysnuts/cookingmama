@@ -5,28 +5,25 @@ liefert nur noch die API (`/api/v1`), die Oberfläche ist diese SwiftUI-App. iOS
 
 ## Funktionen
 
-- **Start:** Begrüßung, Vorschläge passend zur Tageszeit, Ernährung und Vorrat („Sofort kochbar“ oder
-  „Auch mit fehlenden Zutaten“), Favoriten für die aktuelle Mahlzeit, Hinweise auf Rezepte mit langer
-  Stehzeit, „Zuletzt gekocht“
-- **Rezepte:** Kategorie-Leiste und Schaltfläche „Kategorien“ (Kacheln mit Anzahl, eigene Kategorien anlegen, Admins
-  benennen um/löschen), Suche (Titel, Kategorie, Zutat, #tag), Filter (Art, Ernährung, Mahlzeit, Favoriten), Zufallsrezept
-- **Rezeptdetail:** Fotos, Portionsrechner, Zutaten mit Vorratsstatus und Alternativen, abhakbare Schritte
-  mit Zutatenmengen, Backangaben, Nährwerte, Bewertungen/Kommentare, Favorit, „Gekocht/Gebacken“ bucht den
-  Vorrat ab (Alternative wählbar), fehlende Zutaten auf die Einkaufsliste
-- **Mitteilungen:** Vorrat knapp, Stehzeit vorbei, Einkaufslisten-Erinnerung, neue Bewertungen,
-  Haushalts-Einladungen, Kontoanfragen (Admins) – je Kategorie abschaltbar (Mehr → Mitteilungen).
-  Tippen auf eine Mitteilung öffnet das Rezept.
-- **Rezept-Editor:** Koch-/Backrezept, Mahlzeiten, Tags, Fotos (Mediathek/Kamera), Zutaten mit Einheit,
-  Einstufung, Hinweis, Alternative und Vorteig, Schritte mit Zutatenmengen, Stehzeit-Schritte,
-  Backschritt, Stehzeit-Planung, Nährwerte
+- **Start:** Begrüßung und ein zufälliges Rezept passend zur aktuellen Essenszeit („Anderer Vorschlag“
+  würfelt neu), weitere passende Rezepte, Favoriten für die Mahlzeit, „Zuletzt gekocht“
+- **Rezepte:** startet mit den Kategorien (Kacheln mit Anzahl), Suche über alle Rezepte (Titel, Zutat,
+  Kategorie, #tag), Zufallsrezept, Filter innerhalb einer Kategorie (Art, Ernährung, Mahlzeit, Favoriten),
+  eigene Kategorien anlegen (Admins benennen um/löschen)
+- **Was habe ich da?:** Zutaten eingeben (mit oder ohne Menge) und passende Rezepte bekommen – komplett
+  kochbare zuerst, sonst mit Liste der fehlenden Zutaten. Grundzutaten (Salz, Pfeffer, Wasser, Zucker, Öl)
+  zählen auf Wunsch als vorhanden. Die Liste bleibt auf dem iPhone gespeichert.
+- **Rezeptdetail:** Fotos, Portionsrechner, Zutaten mit Alternativen, abhakbare Schritte mit Zutatenmengen,
+  Backangaben, Nährwerte, Bewertungen/Kommentare, Favorit, „Auf die Einkaufsliste“ (Zutaten auswählen,
+  Menge passend zur Portionenzahl), „Heute gekocht/gebacken“
+- **Rezept-Editor:** Kategorie, Koch-/Backrezept, Mahlzeiten, Tags, Fotos (Mediathek/Kamera), Zutaten mit
+  Einheit, Einstufung, Hinweis, Alternative und Vorteig, Schritte mit Zutatenmengen, Stehzeiten, Nährwerte
 - **Automatisch:** Fotos/PDFs eines Rezepts hochladen → Claude erstellt es („Erstelle meine Kochbuch-Rezepte“)
-- **Vorrat:** Haushalt wechseln, Bestand/Mindestbestand/Nachkaufmenge/Kauf-Einheit, Foto, schnelles
-  Auffüllen per Wischen, knappe Zutaten auf die Einkaufsliste
-- **Einkaufsliste:** Einträge mit Vorschlägen, Abhaken bucht in den Vorrat, Teilen
-- **Mehr:** Benachrichtigungen (inkl. Haushalts-Einladungen), Favoriten, Konto (Ernährung, Essenszeiten,
-  Einkaufserinnerung, Passwort), Mitteilungen, Haushalte (einladen, umbenennen, verlassen)
-- **Admin:** Kontoanfragen freigeben, Nutzer anlegen/Rollen/Passwort/Löschen, alle Haushalte verwalten,
-  Datenbank-Backup
+- **Einkaufsliste:** gemeinsam für alle, Einträge mit Vorschlägen, gleiche Zutaten werden zusammengezählt, Teilen
+- **Mitteilungen:** Stehzeit vorbei, Einkaufslisten-Erinnerung, neue Bewertungen, Kontoanfragen (Admins) –
+  je Kategorie abschaltbar (Mehr → Mitteilungen). Tippen auf eine Mitteilung öffnet das Rezept.
+- **Mehr:** Benachrichtigungen, Favoriten, Konto (Ernährung, Essenszeiten, Einkaufserinnerung, Passwort)
+- **Admin:** Kontoanfragen freigeben, Nutzer anlegen/Rollen/Passwort/Löschen, Datenbank-Backup
 
 ## Wie Mitteilungen ankommen
 

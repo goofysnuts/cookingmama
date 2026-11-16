@@ -83,11 +83,9 @@ enum NotificationService {
 
   private static func title(for category: String?) -> String {
     switch category {
-    case "lowStock": return "Vorrat wird knapp"
     case "restTimer": return "Stehzeit vorbei"
     case "shoppingReminder": return "Einkaufsliste"
     case "comments": return "Neue Bewertung"
-    case "household": return "Haushalt"
     case "admin": return "Kochbuch-Verwaltung"
     default: return "Kochbuch"
     }

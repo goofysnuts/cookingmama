@@ -109,7 +109,6 @@ struct DietPill: View {
 
 struct RecipeRow: View {
   let recipe: RecipeSummary
-  var showMissing = false
   var showCategory = true
 
   var body: some View {
@@ -144,25 +143,29 @@ struct RecipeRow: View {
              let alt = recipe.dietLabelAlt, alt != "keins" {
             Pill(text: "\(Labels.diet(alt)) mögl.", color: .teal)
           }
-          if let can = recipe.canCookNow {
-            if can {
+          if let match = recipe.match {
+            if match.complete {
               Pill(text: "Alles da", systemImage: "checkmark", color: .green)
-            } else if let missing = recipe.missingIngredients, !missing.isEmpty {
-              Pill(text: "\(missing.count) fehlt", systemImage: "cart", color: .orange)
+            } else {
+              Pill(text: "\(match.available)/\(match.total) da", systemImage: "cart", color: .orange)
             }
           }
         }
-        if showMissing, let missing = recipe.missingIngredients, !missing.isEmpty {
-          Text("Fehlt: " + missing.map { "\(Fmt.quantity($0.missingQuantity, $0.unit)) \($0.name)" }.joined(separator: ", "))
+        if let match = recipe.match, !match.missing.isEmpty {
+          Text("Fehlt: " + match.missing.map { m in
+            m.reason == "zu wenig"
+              ? "\(Fmt.quantity(m.missingQuantity ?? m.quantity, m.unit)) mehr \(m.name)"
+              : "\(Fmt.quantity(m.quantity, m.unit)) \(m.name)"
+          }.joined(separator: ", "))
             .font(.caption2)
             .foregroundStyle(.orange)
-            .lineLimit(2)
-        }
-        if let note = recipe.advancePrepNote, recipe.advancePrep == true {
-          Label(note, systemImage: "moon.stars")
-            .font(.caption2)
-            .foregroundStyle(.purple)
             .lineLimit(3)
+        }
+        if let match = recipe.match, !match.usedAlternatives.isEmpty {
+          Text(match.usedAlternatives.joined(separator: ", "))
+            .font(.caption2)
+            .foregroundStyle(.teal)
+            .lineLimit(2)
         }
       }
       Spacer(minLength: 0)

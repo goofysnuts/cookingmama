@@ -7,6 +7,9 @@ struct CategoriesView: View {
   @State private var editing: CategoryEditTarget?
   @State private var deleteTarget: RecipeCategory?
   @State private var search = ""
+  @State private var results: [RecipeSummary] = []
+  @State private var searching = false
+  @State private var randomId: String?
 
   private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
 
@@ -48,20 +51,78 @@ struct CategoriesView: View {
         }
       }
       .padding()
-      if app.isAdmin {
+
+      if !search.trimmed.isEmpty {
+        VStack(alignment: .leading, spacing: 0) {
+          Text(searching ? "Suche …" : "\(results.count) Rezept\(results.count == 1 ? "" : "e") gefunden")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+          ForEach(results) { r in
+            NavigationLink {
+              RecipeDetailView(recipeId: r.id)
+            } label: {
+              RecipeRow(recipe: r)
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Divider().padding(.leading)
+          }
+        }
+      }
+
+      if app.isAdmin, search.isEmpty {
         Text("Tipp: Lange auf eine Kategorie drücken, um sie umzubenennen oder zu löschen.")
           .font(.footnote)
           .foregroundStyle(.secondary)
           .padding(.horizontal)
       }
     }
-    .navigationTitle("Kategorien")
-    .searchable(text: $search, prompt: "Kategorie suchen")
+    .navigationTitle("Rezepte")
+    .navigationDestination(item: $randomId) { id in RecipeDetailView(recipeId: id) }
+    .searchable(text: $search, prompt: "Rezept, Zutat, Kategorie oder #tag")
+    .task(id: search) {
+      let q = search.trimmed
+      guard !q.isEmpty else { results = []; return }
+      searching = true
+      try? await Task.sleep(for: .milliseconds(300))
+      if Task.isCancelled { return }
+      if let res: RecipeListResponse = try? await app.client.get("recipes", query: ["q": q, "diet": "alle"]) {
+        results = res.recipes
+      }
+      searching = false
+    }
     .refreshable { await app.reloadCategories() }
     .task { await app.reloadCategories() }
     .alertMessage($alert)
     .toolbar {
-      Button { editing = .new } label: { Image(systemName: "plus") }
+      ToolbarItem(placement: .topBarLeading) {
+        Button {
+          Task { await random() }
+        } label: {
+          Image(systemName: "dice")
+        }
+      }
+      ToolbarItem(placement: .topBarTrailing) {
+        Menu {
+          NavigationLink {
+            RecipeEditorView(recipe: nil)
+          } label: {
+            Label("Rezept selbst eingeben", systemImage: "square.and.pencil")
+          }
+          NavigationLink {
+            AutoRecipeNewView()
+          } label: {
+            Label("Automatisch aus Fotos/PDF", systemImage: "sparkles")
+          }
+          Button { editing = .new } label: { Label("Neue Kategorie", systemImage: "square.grid.2x2") }
+        } label: {
+          Image(systemName: "plus")
+        }
+      }
     }
     .sheet(item: $editing) { target in
       CategoryEditor(target: target)
@@ -88,6 +149,13 @@ struct CategoriesView: View {
     .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
     .padding(12)
     .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+  }
+
+  private func random() async {
+    do {
+      let res: RandomResponse = try await app.client.get("recipes/random", query: ["meal": "alle"])
+      randomId = res.id
+    } catch { alert = .error(error) }
   }
 
   private func delete(_ c: RecipeCategory) async {

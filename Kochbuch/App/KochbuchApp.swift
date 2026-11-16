@@ -91,7 +91,7 @@ struct RootView: View {
   }
 }
 
-enum AppTab: Hashable { case home, recipes, pantry, shopping, more }
+enum AppTab: Hashable { case home, recipes, match, shopping, more }
 
 struct MainTabView: View {
   @Environment(AppModel.self) private var app
@@ -103,13 +103,13 @@ struct MainTabView: View {
         .tabItem { Label("Start", systemImage: "house") }
         .tag(AppTab.home)
 
-      NavigationStack { RecipesView() }
+      NavigationStack { CategoriesView() }
         .tabItem { Label("Rezepte", systemImage: "book") }
         .tag(AppTab.recipes)
 
-      NavigationStack { PantryView() }
-        .tabItem { Label("Vorrat", systemImage: "refrigerator") }
-        .tag(AppTab.pantry)
+      NavigationStack { MatchView() }
+        .tabItem { Label("Was habe ich?", systemImage: "basket") }
+        .tag(AppTab.match)
 
       NavigationStack { ShoppingListView() }
         .tabItem { Label("Einkauf", systemImage: "cart") }

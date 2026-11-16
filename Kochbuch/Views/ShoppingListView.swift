@@ -52,7 +52,7 @@ struct ShoppingListView: View {
       } header: {
         Text("Offen (\(open.count))")
       } footer: {
-        Text("Abhaken bucht verknüpfte Zutaten mit der Menge in deinen Vorrat.")
+        Text("Gemeinsame Liste für alle. Zutaten aus Rezepten kannst du im Rezept über „Auf die Einkaufsliste“ hinzufügen.")
       }
 
       if !done.isEmpty {
@@ -78,17 +78,8 @@ struct ShoppingListView: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
-        Menu {
-          Button {
-            Task { await autoFill() }
-          } label: {
-            Label("Knappe Zutaten aus dem Vorrat", systemImage: "wand.and.stars")
-          }
-          ShareLink(item: shareText) {
-            Label("Teilen", systemImage: "square.and.arrow.up")
-          }
-        } label: {
-          Image(systemName: "ellipsis.circle")
+        ShareLink(item: shareText) {
+          Image(systemName: "square.and.arrow.up")
         }
       }
     }
@@ -110,10 +101,8 @@ struct ShoppingListView: View {
           .font(.title3)
         VStack(alignment: .leading) {
           Text(item.name).strikethrough(item.checked).foregroundStyle(item.checked ? Color.secondary : Color.primary)
-          if let by = item.createdBy, item.source == "manual" {
+          if let by = item.createdBy {
             Text("von \(by)").font(.caption2).foregroundStyle(.tertiary)
-          } else if item.source == "auto" {
-            Text("aus dem Vorrat").font(.caption2).foregroundStyle(.tertiary)
           }
         }
         Spacer()
@@ -152,7 +141,6 @@ struct ShoppingListView: View {
     do {
       let res: ShoppingListResponse = try await app.client.send("POST", "shopping-list/items/\(item.id)/\(item.checked ? "uncheck" : "check")")
       withAnimation { items = res.items }
-      if !item.checked, item.ingredientId != nil { app.didChangeData() }
     } catch { alert = .error(error) }
   }
 
@@ -170,13 +158,6 @@ struct ShoppingListView: View {
     } catch { alert = .error(error) }
   }
 
-  private func autoFill() async {
-    do {
-      let res: ShoppingListResponse = try await app.client.send("POST", "shopping-list/auto")
-      items = res.items
-      alert = AlertMessage(title: "Einkaufsliste", message: "\(res.added ?? 0) Zutat(en) aus dem Vorrat eingetragen.")
-    } catch { alert = .error(error) }
-  }
 }
 
 struct ShoppingItemEditor: View {

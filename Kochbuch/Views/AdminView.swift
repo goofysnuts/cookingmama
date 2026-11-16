@@ -37,9 +37,6 @@ struct AdminUsersView: View {
               Spacer()
               Text("\(u.recipeCount) Rezepte").font(.caption).foregroundStyle(.secondary)
             }
-            if u.canJoinMultipleHouseholds {
-              Text("Darf mehreren Haushalten beitreten").font(.caption2).foregroundStyle(.secondary)
-            }
           }
           .contextMenu { menu(u) }
           .swipeActions {
@@ -78,9 +75,6 @@ struct AdminUsersView: View {
       Button("Admin-Rolle entziehen") { Task { await patch(u, ["role": "member"]) } }
     } else {
       Button("Zum Admin machen") { Task { await patch(u, ["role": "admin"]) } }
-    }
-    Button(u.canJoinMultipleHouseholds ? "Nur eigener Haushalt" : "Mehrere Haushalte erlauben") {
-      Task { await patch(u, ["canJoinMultipleHouseholds": .bool(!u.canJoinMultipleHouseholds)]) }
     }
     Button("Passwort zurücksetzen") { newPassword = ""; passwordFor = u }
     if !u.isSelf {
@@ -141,7 +135,6 @@ struct AdminNewUserView: View {
   @State private var username = ""
   @State private var password = ""
   @State private var isAdmin = false
-  @State private var multi = false
   @State private var error: String?
 
   var body: some View {
@@ -150,7 +143,6 @@ struct AdminNewUserView: View {
         TextField("Benutzername", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
         SecureField("Passwort (mind. 8 Zeichen)", text: $password)
         Toggle("Admin", isOn: $isAdmin)
-        Toggle("Darf mehreren Haushalten beitreten", isOn: $multi)
         if let error { Text(error).foregroundStyle(.red) }
       }
       .navigationTitle("Neuer Nutzer")
@@ -165,104 +157,12 @@ struct AdminNewUserView: View {
   }
 
   private func create() async {
-    struct Payload: Encodable { let username: String; let password: String; let role: String; let canJoinMultipleHouseholds: Bool }
+    struct Payload: Encodable { let username: String; let password: String; let role: String }
     do {
-      let _: IdResponse = try await app.client.send("POST", "admin/users", body: Payload(username: username.trimmed, password: password, role: isAdmin ? "admin" : "member", canJoinMultipleHouseholds: multi))
+      let _: IdResponse = try await app.client.send("POST", "admin/users", body: Payload(username: username.trimmed, password: password, role: isAdmin ? "admin" : "member"))
       onCreated()
       dismiss()
     } catch { self.error = error.localizedDescription }
-  }
-}
-
-// MARK: - Haushalte
-
-struct AdminHouseholdsView: View {
-  @Environment(AppModel.self) private var app
-  @State private var households: [AdminHousehold] = []
-  @State private var alert: AlertMessage?
-  @State private var addTo: AdminHousehold?
-  @State private var showNew = false
-  @State private var username = ""
-  @State private var newName = ""
-
-  var body: some View {
-    List {
-      ForEach(households) { h in
-        Section {
-          ForEach(h.members) { m in
-            HStack {
-              Label(m.username, systemImage: "person")
-              if m.isOwnHousehold { Text("eigener").font(.caption).foregroundStyle(.secondary) }
-            }
-            .swipeActions {
-              Button("Entfernen", role: .destructive) { Task { await removeMember(m) } }
-            }
-          }
-          Button("Mitglied hinzufügen") { username = ""; addTo = h }
-          if h.members.isEmpty {
-            Button("Haushalt löschen", role: .destructive) { Task { await deleteHousehold(h) } }
-          }
-        } header: {
-          Text("\(h.name) · \(h.pantryItemCount) Vorratseinträge")
-        }
-      }
-    }
-    .navigationTitle("Alle Haushalte")
-    .refreshable { await load() }
-    .task { await load() }
-    .alertMessage($alert)
-    .toolbar {
-      Button { newName = ""; username = ""; showNew = true } label: { Image(systemName: "plus") }
-    }
-    .alert("Mitglied hinzufügen", isPresented: Binding(get: { addTo != nil }, set: { if !$0 { addTo = nil } })) {
-      TextField("Benutzername", text: $username).textInputAutocapitalization(.never)
-      Button("Hinzufügen") { if let h = addTo { Task { await addMember(h) } } }
-      Button("Abbrechen", role: .cancel) { addTo = nil }
-    }
-    .alert("Neuer Haushalt", isPresented: $showNew) {
-      TextField("Name", text: $newName)
-      TextField("Erstes Mitglied (optional)", text: $username).textInputAutocapitalization(.never)
-      Button("Anlegen") { Task { await create() } }
-      Button("Abbrechen", role: .cancel) {}
-    }
-  }
-
-  private func load() async {
-    do {
-      let res: AdminHouseholdsResponse = try await app.client.get("admin/households")
-      households = res.households
-    } catch { alert = .error(error) }
-  }
-
-  private func create() async {
-    struct Payload: Encodable { let name: String; let username: String? }
-    do {
-      let _: IdResponse = try await app.client.send("POST", "admin/households", body: Payload(name: newName.trimmed, username: username.nilIfEmpty))
-      await load()
-    } catch { alert = .error(error) }
-  }
-
-  private func addMember(_ h: AdminHousehold) async {
-    struct Payload: Encodable { let username: String }
-    do {
-      try await app.client.call("POST", "admin/households/\(h.id)/members", body: Payload(username: username.trimmed))
-      await load()
-    } catch { alert = .error(error) }
-    addTo = nil
-  }
-
-  private func removeMember(_ m: AdminHousehold.Member) async {
-    do {
-      try await app.client.call("DELETE", "admin/memberships/\(m.membershipId)")
-      await load()
-    } catch { alert = .error(error) }
-  }
-
-  private func deleteHousehold(_ h: AdminHousehold) async {
-    do {
-      try await app.client.call("DELETE", "admin/households/\(h.id)")
-      await load()
-    } catch { alert = .error(error) }
   }
 }
 

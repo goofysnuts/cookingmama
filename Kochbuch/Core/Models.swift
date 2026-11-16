@@ -30,24 +30,18 @@ struct Me: Decodable {
   let mealTimes: MealTimes
   let defaultMealTimes: MealTimes
   let shoppingListReminderIntervalHours: Int?
-  let canJoinMultipleHouseholds: Bool
-  let activeHouseholdId: String?
   let unreadNotifications: Int
 }
 
 /// Welche Benachrichtigungen als iPhone-Mitteilung erscheinen sollen
 struct NotificationPrefs: Codable, Equatable {
   var comments: Bool
-  var household: Bool
-  var lowStock: Bool
   var restTimer: Bool
   var shoppingReminder: Bool
 
   func allows(_ category: String?) -> Bool {
     switch category {
     case "comments": return comments
-    case "household": return household
-    case "lowStock": return lowStock
     case "restTimer": return restTimer
     case "shoppingReminder": return shoppingReminder
     default: return true
@@ -66,10 +60,21 @@ struct RestPlan: Codable, Hashable {
   var maxMinutes: Int
 }
 
-struct MissingIngredient: Decodable, Hashable {
-  let name: String
-  let missingQuantity: Double
-  let unit: String
+/// Ergebnis von „Was habe ich da?“ je Rezept
+struct MatchInfo: Decodable, Hashable {
+  struct Missing: Decodable, Hashable {
+    let name: String
+    let quantity: Double
+    let unit: String
+    let reason: String
+    let missingQuantity: Double?
+  }
+  let available: Int
+  let total: Int
+  let ratio: Double
+  let complete: Bool
+  let missing: [Missing]
+  let usedAlternatives: [String]
 }
 
 /// Kategorie, wie sie an einem Rezept hängt
@@ -118,10 +123,7 @@ struct RecipeSummary: Decodable, Identifiable, Hashable {
   let timesCooked: Int?
   // Nur in manchen Antworten
   let isFavorite: Bool?
-  let canCookNow: Bool?
-  let missingIngredients: [MissingIngredient]?
-  let advancePrep: Bool?
-  let advancePrepNote: String?
+  let match: MatchInfo?
 
   var isBaking: Bool { recipeType == "backen" }
 
@@ -147,17 +149,18 @@ struct Dashboard: Decodable {
   let greeting: String
   let mealType: String
   let mealTypeLabel: String
-  let includeIncomplete: Bool
+  let suggestion: RecipeSummary?
+  let moreForMeal: [RecipeSummary]
+  let mealRecipeCount: Int
   let favorites: [RecipeSummary]
-  let suggestions: [RecipeSummary]
   let recentlyCooked: [RecentlyCooked]
   let pendingAutoCount: Int
 }
 
-struct StockInfo: Decodable, Hashable {
-  let quantity: Double
-  let unit: String
-  let unlimited: Bool
+struct MatchResponse: Decodable {
+  let dietFilter: String?
+  let completeCount: Int
+  let recipes: [RecipeSummary]
 }
 
 struct RecipeIngredient: Decodable, Identifiable, Hashable {
@@ -165,7 +168,6 @@ struct RecipeIngredient: Decodable, Identifiable, Hashable {
     let ingredientId: String
     let name: String
     let dietType: String
-    let stock: StockInfo?
   }
   let id: String
   let ingredientId: String
@@ -175,8 +177,6 @@ struct RecipeIngredient: Decodable, Identifiable, Hashable {
   let note: String?
   let dietType: String
   let isPreDough: Bool
-  let stock: StockInfo?
-  let enough: Bool
   let alternative: Alternative?
 }
 
@@ -270,7 +270,7 @@ struct MessageResponse: Decodable {
   let message: String?
 }
 
-struct RandomResponse: Decodable { let id: String }
+struct RandomResponse: Decodable { let id: String; let recipe: RecipeSummary? }
 struct FavoriteResponse: Decodable { let isFavorite: Bool }
 
 // MARK: Rezept speichern (Request)
@@ -333,76 +333,6 @@ struct IngredientInfo: Decodable, Identifiable, Hashable {
 
 struct IngredientListResponse: Decodable { let ingredients: [IngredientInfo] }
 
-struct PantryStock: Decodable, Hashable {
-  let id: String
-  let quantity: Double
-  let unit: String
-  let minQuantity: Double?
-  let purchaseQuantity: Double?
-  let unlimited: Bool
-  let isPublic: Bool
-  let isOwn: Bool
-}
-
-struct PantryEntry: Decodable, Identifiable, Hashable {
-  let ingredientId: String
-  let name: String
-  let unit: String
-  let dietType: String
-  let imageUrl: String?
-  let purchaseUnit: String?
-  let purchaseUnitFactor: Double?
-  let stock: PantryStock?
-  let isLow: Bool
-  let usedInRecipes: Int?
-  var id: String { ingredientId }
-}
-
-struct HouseholdRef: Decodable, Identifiable, Hashable {
-  let id: String
-  let name: String
-}
-
-struct PantryResponse: Decodable {
-  let dietFilter: String?
-  let activeHousehold: HouseholdRef?
-  let households: [HouseholdRef]
-  let items: [PantryEntry]
-}
-
-struct PantryInput: Encodable {
-  var name: String
-  var unit: String
-  var dietType: String
-  var quantity: Double
-  var minQuantity: Double?
-  var purchaseQuantity: Double?
-  var purchaseUnit: String?
-  var purchaseUnitFactor: Double?
-  var unlimited: Bool
-  var isPublic: Bool
-  /// nil = Feld weglassen (unverändert), .some(nil) = Bild entfernen
-  var imageUrl: String??
-
-  enum CodingKeys: String, CodingKey {
-    case name, unit, dietType, quantity, minQuantity, purchaseQuantity, purchaseUnit, purchaseUnitFactor, unlimited, isPublic, imageUrl
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(name, forKey: .name)
-    try c.encode(unit, forKey: .unit)
-    try c.encode(dietType, forKey: .dietType)
-    try c.encode(quantity, forKey: .quantity)
-    try c.encode(minQuantity, forKey: .minQuantity)
-    try c.encode(purchaseQuantity, forKey: .purchaseQuantity)
-    try c.encode(purchaseUnit, forKey: .purchaseUnit)
-    try c.encode(purchaseUnitFactor, forKey: .purchaseUnitFactor)
-    try c.encode(unlimited, forKey: .unlimited)
-    try c.encode(isPublic, forKey: .isPublic)
-    if let imageUrl { try c.encode(imageUrl, forKey: .imageUrl) }
-  }
-}
 
 // MARK: Einkaufsliste
 
@@ -428,38 +358,15 @@ struct ShoppingItemInput: Encodable {
   var unit: String?
 }
 
-// MARK: Haushalte & Benachrichtigungen
-
-struct Household: Decodable, Identifiable, Hashable {
-  let id: String
-  let name: String
-  let isOwnHousehold: Bool
-  let isActive: Bool
-  let members: [UserRef]
-}
-
-struct PendingInvite: Decodable, Identifiable, Hashable {
-  let id: String
-  let householdName: String
-  let invitedBy: String?
-  let createdAt: String?
-}
-
-struct HouseholdsResponse: Decodable {
-  let activeHouseholdId: String
-  let households: [Household]
-  let pendingInvites: [PendingInvite]
-}
+// MARK: Benachrichtigungen
 
 struct AppNotification: Decodable, Identifiable, Hashable {
-  struct Invite: Decodable, Hashable { let id: String; let status: String }
   let id: String
   let message: String
   let read: Bool
   let category: String?
   let createdAt: String?
   let recipeId: String?
-  let invite: Invite?
 }
 
 struct NotificationsResponse: Decodable {
@@ -508,26 +415,9 @@ struct AdminUser: Decodable, Identifiable, Hashable {
   let username: String
   let role: String
   let approved: Bool
-  let canJoinMultipleHouseholds: Bool
   let recipeCount: Int
   let createdAt: String?
   let isSelf: Bool
 }
 
 struct AdminUsersResponse: Decodable { let users: [AdminUser] }
-
-struct AdminHousehold: Decodable, Identifiable, Hashable {
-  struct Member: Decodable, Identifiable, Hashable {
-    let membershipId: String
-    let userId: String
-    let username: String
-    let isOwnHousehold: Bool
-    var id: String { membershipId }
-  }
-  let id: String
-  let name: String
-  let pantryItemCount: Int
-  let members: [Member]
-}
-
-struct AdminHouseholdsResponse: Decodable { let households: [AdminHousehold] }
